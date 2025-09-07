@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Calendario con líneas solo en horas de 7:00 a 22:00</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f9f9f9; margin:0; padding:0; }
+    #calendar-container {
+      max-width: 1100px; margin: 30px auto; background: #fff;
+      border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.09); padding: 30px 20px 20px 20px;
+    }
+    #calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+    #view-buttons { display: flex; gap: 7px; }
+    #view-buttons button {
+      border: none; background: #e4e4e4; color: #333;
+      padding: 8px 14px; border-radius: 4px; font-weight: bold; cursor: pointer; transition: background 0.2s;
+    }
+    #view-buttons button.active, #view-buttons button:hover { background: #2564cf; color: white; }
+    #calendar-controls { display: flex; gap: 10px; }
+    #calendar-controls button {
+      border: none; background: #dbeafe; color: #2564cf; font-size: 18px;
+      padding: 4px 10px; border-radius: 4px; cursor: pointer; font-weight: bold;
+    }
+    #calendar-controls span { margin: 0 12px; font-size: 20px; font-weight: bold; }
+
+    /* MENSUAL */
+    table.calendar-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    table.calendar-table th, table.calendar-table td {
+      border: 1px solid #e0e0e0; padding: 10px; min-width: 100px; height: 90px;
+      vertical-align: top; background: #fff; position: relative; cursor: pointer; transition: background 0.15s;
+    }
+    table.calendar-table th { background: #f5f5f5; color: #2564cf; font-weight: bold; text-align: center; }
+    table.calendar-table td.today { background: #e8f1fd; border: 2px solid #2564cf; }
+    .event-dot-list { margin: 6px 0 0 0; padding: 0; list-style: none; }
+    .event-dot-list li {
+      display: flex; align-items: center; font-size: 13px; margin-bottom: 2px; gap: 5px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 98px;
+    }
+    .event-dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; margin-right: 2px; border: 1.5px solid #888; }
+    .event-more { color: #888; font-size: 12px; }
+
+    /* AGENDA SEMANA/DÍA */
+    .agenda-grid { display: flex; border:1px solid #e0e0e0; border-radius:8px; overflow:hidden; background:#fff; min-height:750px; margin-top:18px;}
+    .agenda-hours { flex:0 0 70px; background:#fafafa; border-right:1px solid #e0e0e0; display: flex; flex-direction: column; align-items: flex-end; position: relative;}
+    .agenda-hour { height:40px; border-bottom:1px solid #eee; color:#888; font-size:15px; padding:0 10px; display:flex; align-items:center; justify-content: flex-end;}
+    .agenda-columns { flex: 1; display: flex;}
+    .agenda-day-col { flex:1; display:flex; flex-direction:column; border-right:1px solid #e0e0e0; background:#fff; min-width:120px; position:relative;}
+    .agenda-day-col:last-child { border-right:none; }
+    .agenda-day-header { background:#f5f5f5; padding:8px 0; text-align:center; border-bottom:1px solid #e0e0e0; color:#2564cf; font-weight:bold; font-size:16px; position:sticky; top:0; z-index:2;}
+    .agenda-events-container {
+      position: relative;
+      flex: 1;
+      height: 600px;
+    }
+    .agenda-event {
+      position: absolute;
+      left: 10px; right: 10px;
+      min-height: 30px;
+      background: #2564cf;
+      color: #fff;
+      border-radius: 4px;
+      padding: 6px 12px;
+      font-size: 15px;
+      cursor: grab;
+      box-shadow: 0 2px 8px #2564cf22;
+      z-index: 2;
+      user-select: none;
+      display: flex; align-items: center; gap:8px;
+      flex-direction: row;
+    }
+    .agenda-event.dragging { opacity:0.5; }
+    .agenda-event .del-btn {
+      margin-left:auto; background:#ff8585; border:none; color:#fff; border-radius:3px; font-size:13px; cursor:pointer; padding:2px 8px;
+    }
+    .agenda-event .color-btn {
+      border:none; background:none; cursor:pointer; padding:0; width: 25px; height: 25px;
+      margin-right: 6px;
+    }
+    .agenda-event input[type="color"] {
+      width: 25px; height: 25px; border: none; padding: 0; background: none; margin-right: 6px;
+    }
+
+    .agenda-event .evento-texto.semana {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-align: left;
+      align-self: center;
+      font-size: 15px;
+      cursor: pointer;
+      padding: 3px 5px;
+      display: flex;
+      align-items: center;
+      height: 100%;
+      min-width: 40px;
+      min-height: 20px;
+    }
+    .agenda-event .evento-texto.dia {
+      flex: 1;
+      white-space: pre-line;
+      word-break: break-word;
+      text-align: left;
+      align-self: center;
+      font-size: 15px;
+      cursor: pointer;
+      padding: 3px 5px;
+      display: flex;
+      align-items: center;
+      min-width: 40px;
+      min-height: 20px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 3px;
+    }
+    .agenda-event .evento-texto.editando {
+      background: #fff;
+      color: #222;
+      outline: 1.5px solid #2564cf;
+    }
+    .agenda-events-container.drop-target { background: #e2edff; }
+    .dashed-line {
+      position: absolute;
+      left: 0; right: 0;
+      height: 0;
+      border-top: 1px dashed #bbb;
+      z-index: 1;
+      pointer-events: none;
+    }
+    @media (max-width:900px) {
+      .agenda-hour { font-size:12px; }
+      .agenda-event { font-size:12px; }
+      .agenda-day-header { font-size:13px;}
+      table.calendar-table th, table.calendar-table td { min-width: 55px; padding: 3px; height: 55px; font-size: 12px; }
+      .agenda-event .evento-texto { font-size: 11px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="calendar-container">
+    <div id="calendar-header">
+      <div id="view-buttons">
+        <button data-view="month" class="active">Mensual</button>
+        <button data-view="week">Semanal</button>
+        <button data-view="day">Diaria</button>
+      </div>
+      <div id="calendar-controls">
+        <button id="prev-btn">&#8592;</button>
+        <span id="calendar-label"></span>
+        <button id="next-btn">&#8594;</button>
+      </div>
+    </div>
+    <div id="calendar-content"></div>
+  </div>
+  <script>
+    // Configuración
+    const HOURS = Array.from({length: 16}, (_,i) => i+7); // 7:00 a 22:00
+    const WEEKDAYS = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+    const AGENDA_HEIGHT = 600; // px, alto del contenedor vertical de eventos
+
+    function startOfWeek(date) {
+      const d = new Date(date);
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6:1);
+      return new Date(d.setDate(diff));
+    }
+    function addDays(date, days) {
+      const d = new Date(date);
+      d.setDate(d.getDate() + days);
+      return d;
+    }
+    function sameDay(a, b) {
+      return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+    }
+    function formatDate(date) {
+      const yyyy = date.getFullYear();
+      const mm = String(date.getMonth()+1).padStart(2,'0');
+      const dd = String(date.getDate()+ '').padStart(2,'0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    function formatLongDate(date) {
+      return date.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    }
+    function getMonthName(date) {
+      return date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+    }
+
+    // --- Almacenamiento local
+    function getEvents() {
+      return JSON.parse(localStorage.getItem('calendarEventsHourList_v5') || '{}');
+    }
+    function saveEvents(events) {
+      localStorage.setItem('calendarEventsHourList_v5', JSON.stringify(events));
+    }
+    function getDayEvents(dateStr) {
+      const events = getEvents();
+      return (events[dateStr]||[]).map(ev => Object.assign({},ev));
+    }
+    function setDayEvents(dateStr, eventArr) {
+      const events = getEvents();
+      if (eventArr.length > 0) events[dateStr] = eventArr;
+      else delete events[dateStr];
+      saveEvents(events);
+    }
+    function getAllDayEventList(dateStr) {
+      return getDayEvents(dateStr)||[];
+    }
+
+    // Añadir líneas discontínuas SOLO en las horas en punto (no medias)
+    function addDashedLines(container, totalHeight, fromHour, toHour) {
+      container.querySelectorAll('.dashed-line').forEach(e=>e.remove());
+      const hours = toHour - fromHour;
+      for (let i = 1; i < hours; i++) {
+        const y = (i * totalHeight) / hours;
+        const line = document.createElement('div');
+        line.className = 'dashed-line';
+        line.style.top = y + 'px';
+        container.appendChild(line);
+      }
+    }
+
+    // Estado global
+    const calendarContent = document.getElementById('calendar-content');
+    const calendarLabel = document.getElementById('calendar-label');
+    const viewButtons = document.querySelectorAll('#view-buttons button');
+    const prevBtn = document.getElementById('prev-btn');
+    const nextBtn = document.getElementById('next-btn');
+    let currentDate = new Date();
+    let currentView = 'month';
+
+    function renderCalendar() {
+      if (currentView === 'month') renderMonthView();
+      else renderAgendaLibreView(currentView);
+    }
+
+    // --- Vista mensual igual que tu original
+    function renderMonthView() {
+      calendarLabel.textContent = getMonthName(currentDate).toUpperCase();
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+      const firstDay = new Date(year, month, 1);
+      const lastDay = new Date(year, month+1, 0);
+      const startDay = firstDay.getDay() === 0 ? 6 : firstDay.getDay()-1;
+      const daysInMonth = lastDay.getDate();
+      let html = '<table class="calendar-table"><thead><tr>';
+      const weekDays = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+      weekDays.forEach(d=>{ html+=`<th>${d}</th>` });
+      html += '</tr></thead><tbody><tr>';
+      for(let i=0;i<startDay;i++) html += '<td></td>';
+      for(let d=1; d<=daysInMonth; d++) {
+        const dateObj = new Date(year,month,d);
+        const dateStr = formatDate(dateObj);
+        const eventList = getAllDayEventList(dateStr);
+        const today = sameDay(dateObj, new Date());
+        html += `<td class="${today?'today':''}" data-date="${dateStr}">
+          <div>${d}</div>
+          <ul class="event-dot-list">`+
+          (eventList.length ? eventList.slice(0,3).map(ev =>
+            `<li title="${ev.text}"><span class="event-dot" style="background:${ev.color};"></span>${ev.text.length>15?ev.text.slice(0,14)+'…':ev.text}</li>`
+          ).join('') : '') +
+          (eventList.length>3?`<li class="event-more">+${eventList.length-3} más</li>`:'') +
+          `</ul>
+        </td>`;
+        if ((startDay+d)%7===0 && d!==daysInMonth) html += '</tr><tr>';
+      }
+      let after = (startDay + daysInMonth)%7;
+      if (after!==0) for(let i=after; i<7;i++) html += '<td></td>';
+      html += '</tr></tbody></table>';
+      calendarContent.innerHTML = html;
+      document.querySelectorAll('.calendar-table td[data-date]').forEach(td=>{
+        td.onclick = ()=> { currentView='week'; currentDate=new Date(td.getAttribute('data-date')); updateActiveViewBtn(); renderCalendar(); };
+      });
+    }
+
+    // --- Vista agenda libre (semana/día)
+    function renderAgendaLibreView(mode) {
+      let days;
+      if (mode === 'day') {
+        days = [formatDate(currentDate)];
+        calendarLabel.textContent = formatLongDate(currentDate);
+      } else {
+        const weekStart = startOfWeek(currentDate);
+        days = [];
+        for (let i=0; i<7; i++) days.push(formatDate(addDays(weekStart,i)));
+        calendarLabel.textContent = `Semana del ${weekStart.toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'})}`;
+      }
+      // Render estructura
+      let html = '<div class="agenda-grid">';
+      // Columna de horas
+      html += `<div class="agenda-hours" style="height:${AGENDA_HEIGHT}px;">`;
+      for (let h of HOURS) html+=`<div class="agenda-hour">${h}:00</div>`;
+      html += `</div>`;
+      // Columnas de días
+      html += `<div class="agenda-columns">`;
+      days.forEach((dateStr, dayIdx) => {
+        html += `<div class="agenda-day-col" data-date="${dateStr}">`;
+        if (mode==='week') {
+          let d = new Date(dateStr);
+          html += `<div class="agenda-day-header">${WEEKDAYS[d.getDay() === 0 ? 6 : d.getDay()-1]}<br><span style="font-size:12px;color:#888">${d.getDate()}/${d.getMonth()+1}</span></div>`;
+        }
+        html += `<div class="agenda-events-container" data-date="${dateStr}" style="height:${AGENDA_HEIGHT}px;"></div>`;
+        html += `</div>`;
+      });
+      html += `</div></div>`;
+      calendarContent.innerHTML = html;
+
+      // Render eventos y líneas discontínuas
+      days.forEach(dateStr => {
+        const events = getDayEvents(dateStr);
+        const container = calendarContent.querySelector(`.agenda-events-container[data-date="${dateStr}"]`);
+        // LÍNEAS DISCONTÍNUAS ENTRE HORAS SOLO EN LAS HORAS EN PUNTO
+        addDashedLines(container, AGENDA_HEIGHT, 7, 22);
+
+        events.forEach((ev, idx) => {
+          let eventDiv = document.createElement('div');
+          eventDiv.className = 'agenda-event';
+          eventDiv.style.background = ev.color || '#2564cf';
+          eventDiv.style.top = (ev.top || 20) + 'px';
+          eventDiv.style.height = (ev.height || 50) + 'px';
+          eventDiv.setAttribute('draggable', 'true');
+          eventDiv.setAttribute('data-idx', idx);
+          eventDiv.setAttribute('data-date', dateStr);
+          // Drag source
+          eventDiv.ondragstart = function(e){
+            eventDiv.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', JSON.stringify({date:dateStr, idx:idx, offsetY: e.offsetY}));
+          };
+          eventDiv.ondragend = function(e){
+            eventDiv.classList.remove('dragging');
+            document.querySelectorAll('.agenda-events-container').forEach(el=>el.classList.remove('drop-target'));
+          };
+          // Color editable
+          let colorInput = document.createElement('input');
+          colorInput.type = 'color';
+          colorInput.value = ev.color || '#2564cf';
+          colorInput.title = 'Cambiar color';
+          colorInput.onchange = function(){
+            const events = getDayEvents(dateStr);
+            events[idx].color = colorInput.value;
+            setDayEvents(dateStr, events);
+            renderCalendar();
+          };
+          colorInput.className = "color-btn";
+          eventDiv.appendChild(colorInput);
+
+          // TEXTO: diferente para semana y día
+          let textoDiv = document.createElement('div');
+          textoDiv.className = "evento-texto " + (mode === 'week' ? 'semana' : 'dia');
+          textoDiv.title = "Doble click para editar";
+          textoDiv.textContent = ev.text;
+
+          textoDiv.ondblclick = function(e) {
+            e.stopPropagation();
+            textoDiv.contentEditable = "true";
+            textoDiv.classList.add('editando');
+            textoDiv.focus();
+          };
+          textoDiv.onblur = function() {
+            textoDiv.contentEditable = "false";
+            textoDiv.classList.remove('editando');
+            const events = getDayEvents(dateStr);
+            events[idx].text = textoDiv.textContent;
+            setDayEvents(dateStr, events);
+            renderCalendar();
+          };
+          textoDiv.onkeydown = function(e){
+            if (e.key === "Enter") {
+              e.preventDefault();
+              textoDiv.blur();
+            }
+          };
+          eventDiv.appendChild(textoDiv);
+
+          // Eliminar
+          let del = document.createElement('button');
+          del.className = 'del-btn';
+          del.innerText = 'X';
+          del.onclick = function(e){
+            e.stopPropagation();
+            const events = getDayEvents(dateStr);
+            events.splice(idx,1);
+            setDayEvents(dateStr, events);
+            renderCalendar();
+          };
+          eventDiv.appendChild(del);
+          // Redimensionar altura
+          let resize = document.createElement('div');
+          resize.style = 'height:7px;width:100%;cursor:s-resize;position:absolute;bottom:0;left:0;';
+          let resizing = false, startY=0, startHeight=0;
+          resize.onmousedown = function(e){
+            e.preventDefault(); e.stopPropagation();
+            resizing = true;
+            startY = e.clientY;
+            startHeight = ev.height || 50;
+            document.onmousemove = function(ev2){
+              if (resizing) {
+                const delta = ev2.clientY - startY;
+                const newHeight = Math.max(30, startHeight + delta);
+                const events = getDayEvents(dateStr);
+                events[idx].height = newHeight;
+                setDayEvents(dateStr, events);
+                renderCalendar();
+              }
+            };
+            document.onmouseup = function(){ resizing=false; document.onmousemove=null; document.onmouseup=null; };
+          };
+          eventDiv.appendChild(resize);
+          container.appendChild(eventDiv);
+        });
+        // Añadir evento (doble click)
+        container.ondblclick = function(e){
+          const y = e.offsetY;
+          const events = getDayEvents(dateStr);
+          events.push({top: y, height: 50, text: 'Nuevo evento', color: '#2564cf'});
+          setDayEvents(dateStr, events);
+          renderCalendar();
+        };
+        // Drop target
+        container.ondragover = function(e){ e.preventDefault(); container.classList.add('drop-target'); };
+        container.ondragleave = function(e){ container.classList.remove('drop-target'); };
+        container.ondrop = function(e){
+          container.classList.remove('drop-target');
+          const data = e.dataTransfer.getData('text/plain');
+          if (!data) return;
+          try {
+            const drag = JSON.parse(data);
+            let y = e.offsetY - (drag.offsetY||0);
+            if (y<0) y=0;
+            if (drag.date !== dateStr) {
+              let fromEvents = getDayEvents(drag.date);
+              let ev = fromEvents[drag.idx];
+              if (!ev) return;
+              fromEvents.splice(drag.idx,1);
+              setDayEvents(drag.date, fromEvents);
+              let toEvents = getDayEvents(dateStr);
+              toEvents.push({top: y, height: ev.height, text: ev.text, color: ev.color});
+              setDayEvents(dateStr, toEvents);
+            } else {
+              let events = getDayEvents(dateStr);
+              let ev = events[drag.idx];
+              ev.top = y;
+              setDayEvents(dateStr, events);
+            }
+            renderCalendar();
+          } catch(_){}
+        };
+      });
+    }
+
+    function updateActiveViewBtn() {
+      viewButtons.forEach(b=>b.classList.remove('active'));
+      let btn = Array.from(viewButtons).find(b=>b.getAttribute('data-view')===currentView);
+      if (btn) btn.classList.add('active');
+    }
+    viewButtons.forEach(btn=>{
+      btn.onclick = function() {
+        viewButtons.forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        currentView = btn.getAttribute('data-view');
+        renderCalendar();
+      }
+    });
+    prevBtn.onclick = function() {
+      if (currentView==='month') currentDate.setMonth(currentDate.getMonth()-1);
+      else if (currentView==='week') currentDate.setDate(currentDate.getDate()-7);
+      else currentDate.setDate(currentDate.getDate()-1);
+      renderCalendar();
+    }
+    nextBtn.onclick = function() {
+      if (currentView==='month') currentDate.setMonth(currentDate.getMonth()+1);
+      else if (currentView==='week') currentDate.setDate(currentDate.getDate()+7);
+      else currentDate.setDate(currentDate.getDate()+1);
+      renderCalendar();
+    }
+
+    renderCalendar();
+  </script>
+</body>
+</html>
